@@ -13,13 +13,15 @@ const App: React.FC = () => {
   const handleFormSubmit = async (data: TrackingFormData) => {
     setLoading(true);
     setError(null);
-    setCustomerData(data); // Store data to use in preview (for phone/email links)
+    setCustomerData(data);
     
     try {
       const result = await generateNotificationMessage(data);
       setGeneratedContent(result);
-    } catch (err) {
-      setError("Ocorreu um erro ao gerar a mensagem. Verifique se sua chave API está configurada corretamente.");
+    } catch (err: any) {
+      // Exibe a mensagem de erro real vinda do serviço
+      const msg = err.message || "Erro desconhecido ao gerar mensagem.";
+      setError(`Erro: ${msg}`);
       console.error(err);
     } finally {
       setLoading(false);
@@ -29,6 +31,7 @@ const App: React.FC = () => {
   const handleReset = () => {
     setGeneratedContent(null);
     setCustomerData(null);
+    setError(null);
   };
 
   return (
@@ -61,16 +64,14 @@ const App: React.FC = () => {
                 </svg>
               </div>
               <div className="ml-3">
-                <p className="text-sm text-red-700">{error}</p>
+                <p className="text-sm text-red-700 font-medium">Ops! Algo deu errado:</p>
+                <p className="text-sm text-red-600 mt-1">{error}</p>
               </div>
             </div>
           </div>
         )}
 
         <div className="space-y-8">
-          {/* If we have content, show the preview first or alongside depending on layout desires. 
-              Here we swap views for simplicity in the flow. */}
-          
           {!generatedContent ? (
             <div className="max-w-3xl mx-auto">
               <div className="text-center mb-8">

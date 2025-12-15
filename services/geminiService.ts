@@ -1,34 +1,53 @@
 import { GoogleGenAI, Type } from "@google/genai";
 import { TrackingFormData, GeneratedContent } from "../types";
 
-const apiKey = process.env.API_KEY || '';
-const ai = new GoogleGenAI({ apiKey });
-
-export const generateNotificationMessage = async (data: TrackingFormData): Promise<GeneratedContent> => {
-  if (!apiKey) {
-    throw new Error("API Key não encontrada. Por favor, verifique suas variáveis de ambiente.");
+// Função para obter a API Key com prioridade para o padrão Vite
+const getApiKey = (): string => {
+  // 1. Padrão VITE (Recomendado para este projeto)
+  // O Vite expõe variáveis que começam com VITE_ através de import.meta.env
+  // @ts-ignore
+  if (typeof import.meta !== 'undefined' && import.meta.env && import.meta.env.VITE_API_KEY) {
+    // @ts-ignore
+    return import.meta.env.VITE_API_KEY;
   }
 
+  // 2. Fallbacks (Node.js, Webpack, etc)
+  if (typeof process !== 'undefined' && process.env) {
+    if (process.env.API_KEY) return process.env.API_KEY;
+    if (process.env.REACT_APP_API_KEY) return process.env.REACT_APP_API_KEY;
+    if (process.env.NEXT_PUBLIC_API_KEY) return process.env.NEXT_PUBLIC_API_KEY;
+  }
+
+  return '';
+};
+
+export const generateNotificationMessage = async (data: TrackingFormData): Promise<GeneratedContent> => {
+  const apiKey = getApiKey();
+
+  if (!apiKey) {
+    throw new Error("Chave de API não encontrada! Na Vercel, crie uma variável de ambiente chamada 'VITE_API_KEY' com o valor da sua chave.");
+  }
+
+  const ai = new GoogleGenAI({ apiKey });
+
   const prompt = `
-    Você é um assistente de e-commerce profissional e amigável.
-    Gere uma mensagem de notificação de envio para um cliente.
-    
-    Dados do pedido:
+    Você é um assistente de e-commerce profissional.
+    Gere um JSON com mensagens de notificação de envio.
+
+    Dados:
     - Cliente: ${data.customerName}
     - Produto: ${data.productName}
     - Transportadora: ${data.carrier}
-    - Código de Rastreio: ${data.trackingCode}
-    ${data.trackingLink ? `- Link de Rastreio: ${data.trackingLink}` : ''}
-    ${data.invoiceNumber ? `- Nota Fiscal: ${data.invoiceNumber}` : ''}
+    - Código: ${data.trackingCode}
+    ${data.trackingLink ? `- Link: ${data.trackingLink}` : ''}
+    ${data.invoiceNumber ? `- NF: ${data.invoiceNumber}` : ''}
     
-    Instruções:
-    1. Crie um assunto de e-mail curto e atraente.
-    2. Crie uma mensagem para WhatsApp que seja direta, use emojis adequados (caminhão, caixa, brilhos), inclua o código de rastreio.
-       ${data.trackingLink ? `Use EXATAMENTE este link para o rastreio: ${data.trackingLink}` : 'Inclua um link de rastreamento genérico adequado à transportadora (se for Correios, use https://rastreamento.correios.com.br/app/index.php).'}
-       ${data.invoiceNumber ? `Cite que a Nota Fiscal ${data.invoiceNumber} foi emitida.` : ''}
-    3. Crie um corpo de e-mail mais formal, mas cordial, agradecendo a compra e fornecendo os detalhes.
+    Requisitos:
+    1. 'whatsappMessage': Use emojis. Seja breve. ${data.trackingLink ? 'Use o link fornecido.' : 'Inclua link genérico da transportadora.'}
+    2. 'emailBody': Texto cordial e formatado.
+    3. 'subject': Assunto do e-mail.
     
-    Retorne APENAS o JSON.
+    Retorne APENAS JSON válido.
   `;
 
   try {
@@ -40,9 +59,9 @@ export const generateNotificationMessage = async (data: TrackingFormData): Promi
         responseSchema: {
           type: Type.OBJECT,
           properties: {
-            subject: { type: Type.STRING, description: "Assunto do e-mail" },
-            whatsappMessage: { type: Type.STRING, description: "Mensagem otimizada para WhatsApp com emojis" },
-            emailBody: { type: Type.STRING, description: "Corpo do e-mail completo" }
+            subject: { type: Type.STRING },
+            whatsappMessage: { type: Type.STRING },
+            emailBody: { type: Type.STRING }
           },
           required: ["subject", "whatsappMessage", "emailBody"]
         }
@@ -52,10 +71,11 @@ export const generateNotificationMessage = async (data: TrackingFormData): Promi
     if (response.text) {
       return JSON.parse(response.text) as GeneratedContent;
     } else {
-      throw new Error("Não foi possível gerar a mensagem.");
+      throw new Error("A IA retornou uma resposta vazia.");
     }
-  } catch (error) {
-    console.error("Erro ao chamar Gemini:", error);
-    throw error;
+  } catch (error: any) {
+    console.error("Erro detalhado do Gemini:", error);
+    // Repassa a mensagem de erro original para ajudar no debug
+    throw new Error(error.message || "Falha na comunicação com a IA.");
   }
 };
